@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "docs-rag": {
+      "command": "python",
+      "args": ["-m", "agentrag.mcp_servers.docs_rag.server"],
+      "description": "Document RAG — index and search local documents"
+    },
+    "web-search": {
+      "command": "python",
+      "args": ["-m", "agentrag.mcp_servers.web_search.server"],
+      "description": "Web Search — real-time web search and page fetching"
+    },
+    "code-index": {
+      "command": "python",
+      "args": ["-m", "agentrag.mcp_servers.code_index.server"],
+      "description": "Code Index — index and search code repositories"
+    },
+    "memory": {
+      "command": "python",
+      "args": ["-m", "agentrag.mcp_servers.memory.server"],
+      "description": "Memory — persistent conversation memory"
+    }
+  }
+}
