@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from contextlib import AsyncExitStack
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -106,7 +106,8 @@ class MCPAgentRuntime:
 
         tools = []
         for server in MCP_SERVERS:
-            client = await self._exit_stack.enter_async_context(Client(_module_command(server.module)))
+            transport = _make_transport(server.module)
+            client = await self._exit_stack.enter_async_context(Client(transport))
             self._clients[server.name] = client
 
             discovered = await client.list_tools()
@@ -159,10 +160,22 @@ def _build_llm(model_name: str):
     )
 
 
-def _module_command(module: str) -> str:
-    """Build a shell-safe command string for `python -m module`."""
-    python_executable = sys.executable or "python"
-    return subprocess.list2cmdline([python_executable, "-m", module])
+def _make_transport(module: str):
+    """Create a PythonStdioTransport for the given module."""
+    from fastmcp.client.transports import PythonStdioTransport
+
+    # Resolve the module to a script path
+    # e.g. "agentrag.mcp_servers.docs_rag.server" -> actual file path
+    import importlib
+    mod = importlib.import_module(module)
+    script_path = mod.__file__
+    if script_path is None:
+        raise RuntimeError(f"Cannot resolve module {module} to a file path")
+
+    return PythonStdioTransport(
+        script_path=script_path,
+        python_cmd=sys.executable or "python",
+    )
 
 
 def _tool_attr(tool: Any, *names: str) -> Any:
