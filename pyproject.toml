@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
-    { name = "Luo Yu", email = "rainy1024@example.com" },
+    { name = "URaux", email = "1303113210@qq.com" },
 ]
 dependencies = [
     "langgraph>=0.4",

@@ -15,7 +15,12 @@ async def lifespan(app: FastAPI):
     global _agent
     from agentrag.agent.runner import create_agent
 
-    _agent = await create_agent()
+    try:
+        _agent = await create_agent()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Agent init failed (will retry on first request): {e}")
+        _agent = None
     yield
     _agent = None
 

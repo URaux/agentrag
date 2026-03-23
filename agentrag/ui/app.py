@@ -37,12 +37,11 @@ with st.sidebar:
     st.header("Status")
     if st.button("Refresh"):
         try:
-            from agentrag.storage.chroma import get_collection
+            from agentrag.storage.chroma import get_collection_count
 
             for name in ["documents", "code", "memories"]:
                 try:
-                    col = get_collection(name)
-                    st.metric(name.title(), col.count())
+                    st.metric(name.title(), get_collection_count(name))
                 except Exception:
                     st.metric(name.title(), 0)
         except Exception as e:
