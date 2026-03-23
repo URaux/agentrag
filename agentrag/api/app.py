@@ -125,18 +125,10 @@ async def status():
 
     info = {"model": settings.model, "embedding": settings.embedding_model}
 
-    try:
-        import chromadb
+    from agentrag.storage.chroma import get_collection_count
 
-        client = chromadb.PersistentClient(path=settings.chroma_path)
-        for name in ["documents", "code", "memories"]:
-            try:
-                col = client.get_collection(name)
-                info[name] = col.count()
-            except Exception:
-                info[name] = 0
-    except Exception:
-        info["storage"] = "unavailable"
+    for name in ["documents", "code", "memories"]:
+        info[name] = get_collection_count(name)
 
     return info
 
