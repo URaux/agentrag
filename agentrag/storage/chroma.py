@@ -16,6 +16,10 @@ def _get_settings():
     return settings
 
 
+def _parse_embeddings_response(data: dict) -> list[list[float]]:
+    return [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]
+
+
 def get_embeddings(texts: list[str]) -> list[list[float]]:
     """Get embeddings from OpenAI-compatible API."""
     s = _get_settings()
@@ -26,8 +30,20 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
         timeout=30,
     )
     resp.raise_for_status()
-    data = resp.json()
-    return [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]
+    return _parse_embeddings_response(resp.json())
+
+
+async def get_embeddings_async(texts: list[str]) -> list[list[float]]:
+    """Get embeddings from OpenAI-compatible API without blocking the event loop."""
+    s = _get_settings()
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{s.effective_embedding_base}/embeddings",
+            headers={"Authorization": f"Bearer {s.effective_embedding_key}"},
+            json={"input": texts, "model": s.embedding_model},
+        )
+    resp.raise_for_status()
+    return _parse_embeddings_response(resp.json())
 
 
 def get_client() -> QdrantClient:
@@ -67,6 +83,29 @@ def embed_and_upsert(collection_name: str, ids: list[str], documents: list[str],
     client.upsert(collection_name, points)
 
 
+async def embed_and_upsert_async(
+    collection_name: str,
+    ids: list[str],
+    documents: list[str],
+    metadatas: list[dict],
+):
+    """Embed documents asynchronously and upsert into Qdrant."""
+    embeddings = await get_embeddings_async(documents)
+    dim = len(embeddings[0])
+    _ensure_collection(collection_name, dim)
+
+    client = get_client()
+    points = [
+        models.PointStruct(
+            id=abs(hash(id_)) % (2**63),  # Qdrant needs int or uuid
+            vector=emb,
+            payload={"document": doc, "doc_id": id_, **meta},
+        )
+        for id_, emb, doc, meta in zip(ids, embeddings, documents, metadatas)
+    ]
+    client.upsert(collection_name, points)
+
+
 def query_collection(collection_name: str, query: str, n_results: int = 5, where: dict | None = None):
     """Query collection with semantic search."""
     client = get_client()
@@ -78,6 +117,46 @@ def query_collection(collection_name: str, query: str, n_results: int = 5, where
         return None
 
     query_embedding = get_embeddings([query])[0]
+
+    query_filter = None
+    if where:
+        conditions = [
+            models.FieldCondition(key=k, match=models.MatchValue(value=v))
+            for k, v in where.items()
+        ]
+        query_filter = models.Filter(must=conditions)
+
+    results = client.query_points(
+        collection_name,
+        query=query_embedding,
+        limit=min(n_results, count),
+        query_filter=query_filter,
+    )
+
+    # Convert to ChromaDB-like format for compatibility
+    documents = [[p.payload.get("document", "") for p in results.points]]
+    metadatas = [[{k: v for k, v in p.payload.items() if k != "document"} for p in results.points]]
+    distances = [[1 - p.score for p in results.points]]  # Convert similarity to distance
+
+    return {"documents": documents, "metadatas": metadatas, "distances": distances}
+
+
+async def query_collection_async(
+    collection_name: str,
+    query: str,
+    n_results: int = 5,
+    where: dict | None = None,
+):
+    """Query collection with semantic search using async embeddings."""
+    client = get_client()
+    if not client.collection_exists(collection_name):
+        return None
+
+    count = client.count(collection_name).count
+    if count == 0:
+        return None
+
+    query_embedding = (await get_embeddings_async([query]))[0]
 
     query_filter = None
     if where:

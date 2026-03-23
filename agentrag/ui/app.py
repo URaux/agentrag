@@ -69,8 +69,11 @@ if prompt := st.chat_input("Ask anything..."):
             try:
                 from agentrag.agent.runner import create_agent, run_query
 
-                agent = asyncio.run(create_agent(model_name=model))
-                result = asyncio.run(run_query(agent, prompt))
+                runtime = asyncio.run(create_agent(model_name=model))
+                try:
+                    result = asyncio.run(run_query(runtime, prompt))
+                finally:
+                    asyncio.run(runtime.aclose())
 
                 st.markdown(result["answer"])
                 if verbose and result.get("sources"):

@@ -43,9 +43,14 @@ async def _ask(query: str, model: str | None, verbose: bool):
 
     console.print(Panel(f"[bold]Query:[/bold] {query}", style="blue"))
 
-    with console.status("[bold green]Thinking..."):
-        agent = await create_agent(model_name=model)
-        result = await run_query(agent, query)
+    runtime = None
+    try:
+        with console.status("[bold green]Thinking..."):
+            runtime = await create_agent(model_name=model)
+            result = await run_query(runtime, query)
+    finally:
+        if runtime is not None:
+            await runtime.aclose()
 
     console.print()
     console.print(Markdown(result["answer"]))

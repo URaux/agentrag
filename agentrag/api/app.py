@@ -1,28 +1,33 @@
-"""AgentRAG REST API — FastAPI application."""
+"""AgentRAG REST API FastAPI application."""
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-_agent = None
+_agent_runtime = None
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _agent
+    global _agent_runtime
     from agentrag.agent.runner import create_agent
 
     try:
-        _agent = await create_agent()
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Agent init failed (will retry on first request): {e}")
-        _agent = None
+        _agent_runtime = await create_agent()
+    except Exception as exc:
+        logger.warning("Agent init failed during startup: %s", exc)
+        _agent_runtime = None
+
     yield
-    _agent = None
+
+    if _agent_runtime is not None:
+        await _agent_runtime.aclose()
+    _agent_runtime = None
 
 
 app = FastAPI(
@@ -57,18 +62,22 @@ class SearchRequest(BaseModel):
 
 @app.post("/ask", response_model=QueryResponse)
 async def ask(req: QueryRequest):
-    """Ask a question — agent retrieves from multiple sources and answers."""
+    """Ask a question and answer it with the agent."""
     from agentrag.agent.runner import create_agent, run_query
 
-    agent = _agent
+    runtime = _agent_runtime
     if req.model:
-        agent = await create_agent(model_name=req.model)
+        runtime = await create_agent(model_name=req.model)
 
-    if not agent:
+    if runtime is None:
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
-    result = await run_query(agent, req.query)
-    return QueryResponse(answer=result["answer"], sources=result.get("sources", []))
+    try:
+        result = await run_query(runtime, req.query)
+        return QueryResponse(answer=result["answer"], sources=result.get("sources", []))
+    finally:
+        if req.model and runtime is not None:
+            await runtime.aclose()
 
 
 @app.post("/index")
@@ -91,10 +100,10 @@ async def index(req: IndexRequest):
             result = await index_document(str(target))
         else:
             results = []
-            for f in target.rglob("*"):
-                if f.is_file() and f.suffix in {".txt", ".md", ".pdf", ".json", ".html"}:
-                    r = await index_document(str(f))
-                    results.append(r)
+            for file_path in target.rglob("*"):
+                if file_path.is_file() and file_path.suffix in {".txt", ".md", ".pdf", ".json", ".html"}:
+                    indexed = await index_document(str(file_path))
+                    results.append(indexed)
             result = f"Indexed {len(results)} files"
 
     return {"result": result}
@@ -127,11 +136,9 @@ async def search(req: SearchRequest):
 async def status():
     """System status."""
     from agentrag.config import settings
-
-    info = {"model": settings.model, "embedding": settings.embedding_model}
-
     from agentrag.storage.chroma import get_collection_count
 
+    info = {"model": settings.model, "embedding": settings.embedding_model}
     for name in ["documents", "code", "memories"]:
         info[name] = get_collection_count(name)
 

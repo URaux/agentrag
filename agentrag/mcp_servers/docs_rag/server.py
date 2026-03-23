@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -10,6 +11,86 @@ from fastmcp import FastMCP
 mcp = FastMCP("docs-rag", instructions="Search and retrieve from indexed documents.")
 
 SUPPORTED = {".txt", ".md", ".pdf", ".py", ".json", ".html", ".csv", ".toml", ".yaml", ".yml", ".rst", ".xml"}
+
+
+def _smart_chunk(text: str, chunk_size: int, overlap: int) -> list[str]:
+    def split_keep_separator(value: str, separator: str) -> list[str]:
+        parts = []
+        start = 0
+        while True:
+            index = value.find(separator, start)
+            if index == -1:
+                tail = value[start:]
+                if tail:
+                    parts.append(tail)
+                return parts
+            parts.append(value[start : index + len(separator)])
+            start = index + len(separator)
+
+    def split_recursive(value: str, level: int) -> list[str]:
+        if len(value) <= chunk_size:
+            return [value]
+
+        if level == 0:
+            parts = split_keep_separator(value, "\n\n")
+            if len(parts) > 1:
+                return [piece for part in parts for piece in split_recursive(part, 1)]
+            return split_recursive(value, 1)
+
+        if level == 1:
+            parts = split_keep_separator(value, "\n")
+            if len(parts) > 1:
+                return [piece for part in parts for piece in split_recursive(part, 2)]
+            return split_recursive(value, 2)
+
+        if level == 2:
+            parts = [part for part in re.split(r"(?<=[.!?] )", value) if part]
+            if len(parts) > 1:
+                return [piece for part in parts for piece in split_recursive(part, 3)]
+
+        return [value[i : i + chunk_size] for i in range(0, len(value), chunk_size)]
+
+    if not text or chunk_size <= 0:
+        return []
+
+    if chunk_size == 1:
+        overlap = 0
+    else:
+        overlap = max(0, min(overlap, chunk_size - 1))
+
+    base_chunks = []
+    current = ""
+    for piece in split_recursive(text, 0):
+        if not piece:
+            continue
+        if not current:
+            current = piece
+        elif len(current) + len(piece) <= chunk_size:
+            current += piece
+        else:
+            base_chunks.append(current)
+            current = piece
+    if current:
+        base_chunks.append(current)
+
+    chunks = []
+    for chunk in base_chunks:
+        if not chunks or overlap == 0:
+            if chunk.strip():
+                chunks.append(chunk)
+            continue
+
+        remaining = chunk
+        prefix = chunks[-1][-overlap:]
+        while remaining:
+            available = max(chunk_size - len(prefix), 1)
+            combined = prefix + remaining[:available]
+            if combined.strip():
+                chunks.append(combined)
+            remaining = remaining[available:]
+            prefix = chunks[-1][-overlap:]
+
+    return chunks
 
 
 @mcp.tool()
@@ -22,11 +103,7 @@ async def index_document(file_path: str, chunk_size: int = 500, chunk_overlap: i
         return f"Error: Unsupported file type: {path.suffix}"
 
     content = path.read_text(encoding="utf-8", errors="replace")
-    chunks = []
-    for i in range(0, len(content), chunk_size - chunk_overlap):
-        chunk = content[i : i + chunk_size]
-        if chunk.strip():
-            chunks.append(chunk)
+    chunks = _smart_chunk(content, chunk_size, chunk_overlap)
 
     doc_id = hashlib.md5(file_path.encode()).hexdigest()[:12]
     try:
