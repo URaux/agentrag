@@ -1,5 +1,7 @@
 # AgentRAG — Multi-Source Agentic RAG with MCP
 
+**English** | [中文](README.zh-CN.md)
+
 An intelligent research assistant that combines **Retrieval-Augmented Generation** with an **autonomous agent** powered by **Model Context Protocol (MCP)**.
 
 The agent reasons about your question, selects the right retrieval tools, fetches information from multiple sources, and synthesizes a coherent answer — all through a CLI, REST API, or Web UI.
@@ -47,7 +49,7 @@ User Query
 
 ```bash
 # Clone and install
-git clone https://github.com/rainy1024/agentrag.git
+git clone https://github.com/URaux/agentrag.git
 cd agentrag
 pip install -e ".[dev]"
 
