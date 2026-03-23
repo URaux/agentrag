@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     chroma_path: str = "./data/chroma"
     sqlite_path: str = "./data/metadata.db"
     data_dir: str = "./data"
+    vector_mode: str = "local"
+    qdrant_url: str | None = None
+    qdrant_api_key: str | None = None
 
     # MCP
     mcp_config: str = "./mcp_servers/config.json"

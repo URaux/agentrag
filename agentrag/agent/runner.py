@@ -36,7 +36,7 @@ MCP_SERVERS: tuple[MCPServerConfig, ...] = (
     MCPServerConfig(
         name="web_search",
         module="agentrag.mcp_servers.web_search.server",
-        tools=("web_search", "fetch_page"),
+        tools=("web_search", "tavily_search", "fetch_page"),
     ),
     MCPServerConfig(
         name="code_index",

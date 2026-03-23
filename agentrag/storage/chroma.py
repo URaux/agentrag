@@ -50,9 +50,14 @@ def get_client() -> QdrantClient:
     global _client
     if _client is None:
         s = _get_settings()
-        db_path = str(Path(s.data_dir) / "qdrant")
-        Path(db_path).mkdir(parents=True, exist_ok=True)
-        _client = QdrantClient(path=db_path)
+        if s.vector_mode == "remote":
+            if not s.qdrant_url:
+                raise ValueError("AGENTRAG_QDRANT_URL must be set when AGENTRAG_VECTOR_MODE=remote")
+            _client = QdrantClient(url=s.qdrant_url, api_key=s.qdrant_api_key)
+        else:
+            db_path = str(Path(s.data_dir) / "qdrant")
+            Path(db_path).mkdir(parents=True, exist_ok=True)
+            _client = QdrantClient(path=db_path)
     return _client
 
 
