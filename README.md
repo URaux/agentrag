@@ -8,9 +8,33 @@ The agent reasons about your question, selects the right retrieval tools, fetche
 
 ## Architecture
 
-![AgentRAG Architecture](docs/architecture.png)
-
-> Interactive version: [docs/architecture.html](docs/architecture.html)
+```
+User Query
+    │
+    ▼
+┌─────────────────────────────────┐
+│  LangGraph ReAct Agent          │
+│  (DeepSeek / GPT / Claude)      │
+│                                 │
+│  Thinks → Selects Tools → Acts  │
+└────────────┬────────────────────┘
+             │ MCP Tool Calls
+             ▼
+┌────────────────────────────────────────────┐
+│  MCP Servers (FastMCP)                     │
+│                                            │
+│  📄 docs-rag     — Index & search docs     │
+│  🔍 web-search   — DuckDuckGo + fetch      │
+│  💻 code-index   — Semantic code search     │
+│  🧠 memory       — Persistent memory       │
+└────────────┬───────────────────────────────┘
+             │
+             ▼
+┌────────────────────────────────────────────┐
+│  Vector Store (Qdrant local)               │
+│  Embeddings: text-embedding-3-large        │
+└────────────────────────────────────────────┘
+```
 
 ## Features
 
